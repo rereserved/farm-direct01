@@ -1,0 +1,6 @@
+node_modules/
+farmdirect.db
+farmdirect.db-wal
+farmdirect.db-shm
+*.log
+.DS_Store

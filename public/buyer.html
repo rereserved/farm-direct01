@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>My Cart & Orders — FarmDirect</title>
+<link rel="stylesheet" href="/css/style.css"></head>
+<body>
+<nav><a class="logo" href="/">🌾 Farm<span>Direct</span></a>
+<ul><li><a href="/">Marketplace</a></li><li><a href="/admin.html">AI Insights</a></li><li id="authSlot"></li></ul></nav>
+
+<section>
+  <h2 class="title">🛒 My Cart</h2>
+  <p class="subtitle">Every rupee goes to the farmer — no middlemen</p>
+  <div id="cart"></div>
+  <div id="checkoutBar" style="text-align:center;display:none;margin-top:20px">
+    <h3 id="totals"></h3>
+    <label><input type="radio" name="dtype" value="consumer" checked> Home delivery</label>
+    <label><input type="radio" name="dtype" value="bulk"> Bulk / business</label><br><br>
+    <button class="btn" onclick="checkout()">Place Order & Pay Farmer</button>
+  </div>
+</section>
+
+<section class="dark">
+  <h2 class="title">📋 Order History</h2>
+  <div id="history"></div>
+</section>
+
+<script src="/js/app.js"></script>
+<script>
+async function init() {
+  const u = getUser();
+  if (!u) { location.href = '/'; return; }
+  if (u.role !== 'buyer') { location.href = '/farmer.html'; return; }
+  renderHeader(); loadCart(); loadHistory();
+}
+
+async function loadCart() {
+  const c = await api('/api/cart');
+  cart.innerHTML = c.items.length ? c.items.map(i => `
+    <div class="card orderrow">
+      <b>${icon(i.crop)} ${i.crop}</b> (Grade ${i.grade}) — ₹${i.price_per_kg}/kg
+      <small>from ${i.farmer_name}, ${i.location}</small><br>
+      <div class="row">
+        <input type="number" class="qty" value="${i.qty_kg}" min="1" max="${i.stock}"
+          onchange="updateCart(${i.produce_id}, this.value)"> kg
+        <button class="btn sm danger" onclick="removeItem(${i.produce_id})">Remove</button>
+      </div>
+    </div>`).join('') : '<p style="color:#777;text-align:center">Cart empty — <a href="/">browse marketplace</a></p>';
+  checkoutBar.style.display = c.items.length ? 'block' : 'none';
+  totals.innerHTML = `Total: <b class="price">₹${c.total}</b> · You save <b style="color:#8bc34a">₹${c.savings}</b> vs mandi prices!`;
+}
+
+async function updateCart(produce_id, qty) {
+  if (+qty <= 0) return removeItem(produce_id);
+  try {
+    await api('/api/cart', { method: 'POST', body: JSON.stringify({ produce_id, qty_kg: +qty }) });
+    loadCart(); refreshCartBadge();
+  } catch (e) { alert('❌ ' + e.message); loadCart(); }
+}
+
+async function removeItem(produce_id) {
+  await api('/api/cart/' + produce_id, { method: 'DELETE' });
+  loadCart(); refreshCartBadge();
+}
+
+async function checkout() {
+  const delivery_type = document.querySelector('input[name="dtype"]:checked').value;
+  try {
+    const r = await api('/api/checkout', { method: 'POST', body: JSON.stringify({ delivery_type }) });
+    alert(r.message);
+    loadCart(); loadHistory(); refreshCartBadge();
+  } catch (e) { alert('❌ ' + e.message); }
+}
+
+async function loadHistory() {
+  const rows = await api('/api/orders/buyer');
+  history.innerHTML = rows.length ? rows.map(o => `
+    <div class="card orderrow">
+      <b>Order #${o.id}</b> — ${o.qty_kg}kg ${o.crop} = <b class="price">₹${o.total}</b>
+      <br><small>🚜 ${o.farmer_name} · ${o.farmer_location}</small><br>
+      <span class="status st-${o.status}">${o.status}</span>
+    </div>`).join('')
+    : '<p style="color:#ccc;text-align:center">No orders yet.</p>';
+}
+
+const icon = c => ({ Tomato:'🍅',Onion:'🧅',Potato:'🥔',Wheat:'🌾',Soybean:'🫘' }[c] || '🥬');
+init();
+</script>
+</body>
+</html>
