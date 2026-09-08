@@ -1,10 +1,12 @@
 const express = require('express');
+const cors = require('cors');
 const crypto = require('crypto');
 const { db, hash, makeSalt } = require('./db');
 const { forecastAll } = require('./ai/forecast');
 const { optimizeRoute } = require('./ai/routes');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -90,7 +92,7 @@ app.get('/api/produce', (req, res) => {
   if (q)    { sql += ' AND (p.crop LIKE ? OR u.name LIKE ? OR u.location LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
   if (crop) { sql += ' AND p.crop = ?'; params.push(crop); }
   if (cat)  {
-    const allCrops = ['Tomato','Onion','Potato','Carrot','Spinach','Wheat','Rice','Soybean','Mango','Banana'];
+    const allCrops = db.prepare('SELECT DISTINCT crop FROM produce').all().map(r => r.crop);
     const matching = allCrops.filter(c => cropCatSafe(c).includes(cat));
     if (matching.length > 0) {
       sql += ` AND p.crop IN (${matching.map(() => '?').join(',')})`;

@@ -16,6 +16,12 @@ mk('Demo Buyer',   '9000000000', 'buyer',  null,           'Nashik, MH', 19.9975
 
 const fid = phone => db.prepare('SELECT id FROM users WHERE phone = ?').get(phone).id;
 
+db.exec(`
+  DELETE FROM reviews;
+  DELETE FROM produce;
+  DELETE FROM sales_history;
+`);
+
 const insP = db.prepare(`INSERT INTO produce
   (farmer_id, crop, grade, quantity_kg, price_per_kg, mandi_price, location)
   VALUES (?,?,?,?,?,?,?)`);
@@ -38,7 +44,9 @@ const insS = db.prepare('INSERT INTO sales_history (crop, month, qty_sold) VALUE
 Object.entries(history).forEach(([crop, arr]) => arr.forEach((q, i) => insS.run(crop, i + 1, q)));
 
 const insR = db.prepare(`INSERT OR IGNORE INTO reviews (produce_id, user_id, rating, title, body) VALUES (?,?,?,?,?)`);
-insR.run(1, fid('9000000000'), 5, 'Super fresh & organic!', 'Received fresh tomatoes directly harvested from Nashik farm. Great packaging and quality.');
-insR.run(2, fid('9000000000'), 4, 'Very good onions', 'Good size and dry skin, saved ₹6/kg vs local market.');
+const pTom = db.prepare('SELECT id FROM produce WHERE crop = ? ORDER BY id ASC LIMIT 1').get('Tomato');
+const pOni = db.prepare('SELECT id FROM produce WHERE crop = ? ORDER BY id ASC LIMIT 1').get('Onion');
+if (pTom) insR.run(pTom.id, fid('9000000000'), 5, 'Super fresh & organic!', 'Received fresh tomatoes directly harvested from Nashik farm. Great packaging and quality.');
+if (pOni) insR.run(pOni.id, fid('9000000000'), 4, 'Very good onions', 'Good size and dry skin, saved ₹6/kg vs local market.');
 
 console.log('✅ Seeded. Demo logins (password: farm123): farmer 9876500001 · buyer 9000000000');

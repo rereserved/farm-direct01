@@ -1,13 +1,14 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { DatabaseSync } = require('node:sqlite');
 const crypto = require('crypto');
 
 const isVercel = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
-const dbPath = isVercel ? path.join('/tmp', 'farmdirect.db') : path.join(__dirname, 'farmdirect.db');
+const dbPath = isVercel ? path.join(os.tmpdir(), 'farmdirect.db') : path.join(__dirname, 'farmdirect.db');
 
 const db = new DatabaseSync(dbPath);
-db.exec('PRAGMA journal_mode = WAL');
+try { db.exec('PRAGMA journal_mode = WAL'); } catch {}
 
 db.transaction = fn => (...args) => {
   db.exec('BEGIN');

@@ -1,4 +1,4 @@
-﻿const CROPS = {
+const CROPS = {
   Tomato:  { img: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400', cat: 'Vegetables' },
   Onion:   { img: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=400', cat: 'Vegetables' },
   Potato:  { img: 'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=400', cat: 'Vegetables' },
@@ -11,4 +11,7 @@
 };
 const cropImg = c => (CROPS[c] || {}).img || 'https://images.unsplash.com/photo-1610348725531-843dff563e2c?w=400';
 const cropCat = c => (CROPS[c] || {}).cat || 'Other';
-const stars = r => '\u2605\u2605\u2605\u2605\u2605'.slice(0, Math.round(r)) + '\u2606\u2606\u2606\u2606\u2606'.slice(0, 5 - Math.round(r));
+const stars = r => {
+  const n = Math.max(0, Math.min(5, Math.round(Number(r) || 0)));
+  return '★★★★★'.slice(0, n) + '☆☆☆☆☆'.slice(0, 5 - n);
+};
