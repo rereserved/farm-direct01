@@ -10,6 +10,10 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
+// Keep direct auth URLs working for bookmarks and deployed links.
+app.get(['/login', '/login.html'], (req, res) => res.redirect('/?auth=login'));
+app.get(['/register', '/register.html'], (req, res) => res.redirect('/?auth=register'));
+
 // ---------- session middleware ----------
 function auth(req, res, next) {
   const token = (req.headers.authorization || '').replace('Bearer ', '');
