@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const crypto = require('crypto');
 const { db, hash, makeSalt } = require('./db');
@@ -8,7 +9,13 @@ const { optimizeRoute } = require('./ai/routes');
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+const publicDir = path.join(__dirname, 'public');
+app.use(express.static(publicDir));
+app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+
+// Keep direct auth URLs working for bookmarks and deployed links.
+app.get(['/login', '/login.html'], (req, res) => res.redirect('/?auth=login'));
+app.get(['/register', '/register.html'], (req, res) => res.redirect('/?auth=register'));
 
 // ---------- session middleware ----------
 function auth(req, res, next) {
