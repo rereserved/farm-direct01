@@ -1,0 +1,132 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Product — FarmDirect</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.pdp{display:grid;grid-template-columns:1fr 1.2fr;gap:35px;max-width:1100px;margin:0 auto}
+.pdp img.main{width:100%;border-radius:14px;box-shadow:0 4px 20px rgba(0,0,0,.1)}
+.ratingbar{display:flex;align-items:center;gap:8px;margin:8px 0}
+.stars{color:#f5a623;font-size:1.2rem;letter-spacing:2px}
+.hist{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:.85rem;max-width:320px}
+.hist .bar{height:14px;background:#eee;border-radius:7px;overflow:hidden}
+.hist .bar i{display:block;height:100%;background:#f5a623}
+.review{border-bottom:1px solid #eee;padding:18px 0}
+.verified{background:#e8f5e9;color:#2e7d32;font-size:.72rem;padding:2px 8px;border-radius:10px;font-weight:700}
+.bigprice{font-size:2.4rem;color:var(--dark);font-weight:800}
+.pct{background:#c62828;color:#fff;padding:4px 12px;border-radius:8px;font-weight:700;margin-left:10px}
+@media(max-width:800px){.pdp{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<nav><a class="logo" href="/">🌾 Farm<span>Direct</span></a>
+<ul><li><a href="/">Marketplace</a></li><li><a href="/farmer.html">Sell (Farmers)</a></li>
+<li><a href="/buyer.html">🛒 Cart <span id="cartBadge" class="badge" style="display:none">0</span></a></li>
+<li id="authSlot"></li></ul></nav>
+
+<section><div id="pdp" class="pdp"></div></section>
+
+<section>
+  <h2 class="title">⭐ Ratings & Reviews</h2>
+  <div id="ratingSummary" style="text-align:center;margin-bottom:20px"></div>
+  <div id="histogram" class="hist" style="margin:0 auto 35px"></div>
+  <div style="max-width:600px;margin:0 auto 40px;background:#fff;padding:24px;border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,.06)">
+    <h3>Write a Review</h3>
+    <div id="pickStars" style="font-size:2rem;color:#ccc;cursor:pointer;margin:8px 0">
+      <span onclick="pick(1)">★</span><span onclick="pick(2)">★</span><span onclick="pick(3)">★</span>
+      <span onclick="pick(4)">★</span><span onclick="pick(5)">★</span>
+    </div>
+    <input id="rvTitle" placeholder="Review title (e.g. Great quality!)">
+    <textarea id="rvBody" rows="3" placeholder="Tell others about freshness, packaging, delivery..." style="width:100%;padding:11px;margin:8px 0;border:1px solid #ccc;border-radius:8px;font-family:inherit"></textarea>
+    <button class="btn" onclick="submitReview()">Submit Review</button>
+    <p id="rvMsg" style="color:#c00;margin-top:8px"></p>
+  </div>
+  <div id="reviews" style="max-width:600px;margin:0 auto"></div>
+</section>
+
+<script src="/js/app.js"></script>
+<script src="/js/crops.js"></script>
+<script>
+const pid = new URLSearchParams(location.search).get('id');
+let myRating = 0;
+
+function pick(n) {
+  myRating = n;
+  document.querySelectorAll('#pickStars span').forEach((s, i) =>
+    s.style.color = i < n ? '#f5a623' : '#ccc');
+}
+
+async function load() {
+  const p = await api('/api/produce/' + pid);
+  document.title = `${p.crop} — FarmDirect`;
+
+  const disc = Math.round((1 - p.price_per_kg / p.mandi_price) * 100);
+  pdp.innerHTML = `
+    <div>
+      <img class="main" src="${cropImg(p.crop)}" alt="${p.crop}">
+    </div>
+    <div>
+      <h1>${p.crop} <small>(Grade ${p.grade})</small></h1>
+      <div class="ratingbar">
+        <span class="stars">${stars(p.rating.avg)}</span>
+        <span>${p.rating.avg} · ${p.rating.count} rating${p.rating.count === 1 ? '' : 's'}</span>
+      </div>
+      <p class="bigprice">₹${p.price_per_kg}<small>/kg</small>
+        <s style="font-size:1.1rem;color:#999">₹${p.mandi_price ? p.mandi_price.toFixed(0) : ''}</s>
+        <span class="pct">${disc}% OFF</span></p>
+      <p style="color:#2e7d32;font-weight:600">In stock — ${p.quantity_kg} kg available</p>
+      <p style="margin:14px 0">Sold by <b>${p.seller.fpo || p.seller.name}</b> (${p.seller.location})
+        · Seller rating ${p.seller.rating.avg}⭐ (${p.seller.rating.count})</p>
+      <div class="row wrap">
+        <input type="number" id="buyQty" class="qty" value="5" min="1" max="${p.quantity_kg}"> kg
+        <button class="btn" onclick="addToCart(${p.id})">🛒 Add to Cart</button>
+        <button class="btn" style="background:#e65100" onclick="buyNow(${p.id})">⚡ Buy Now</button>
+      </div>
+      <hr style="margin:22px 0;border:none;border-top:1px solid #eee">
+      <p>🚚 Delivery via FarmDirect logistics · 🌱 100% direct from farmer · 💳 Payment goes to farmer</p>
+    </div>`;
+
+  ratingSummary.innerHTML = `<span class="stars" style="font-size:2.5rem">${stars(p.rating.avg)}</span>
+    <p>${p.rating.avg} out of 5 · ${p.rating.count} total rating${p.rating.count === 1 ? '' : 's'}</p>`;
+  const total = p.rating.count || 1;
+  histogram.innerHTML = [5,4,3,2,1].map(n => `
+    <span>${n}★</span><span class="bar"><i style="width:${(p.histogram[n] / total * 100)}%"></i></span>
+    <span>${p.histogram[n]}</span>`).join('');
+
+  reviews.innerHTML = p.reviews.length ? p.reviews.map(r => `
+    <div class="review">
+      <span class="stars">${stars(r.rating)}</span> <b>${r.title || ''}</b>
+      ${r.verified ? '<span class="verified">✔ Verified Purchase</span>' : ''}
+      <p style="color:#555;margin:6px 0">${r.body || ''}</p>
+      <small style="color:#999">${r.reviewer_name} · ${new Date(r.created_at).toLocaleDateString()}</small>
+    </div>`).join('')
+    : '<p style="text-align:center;color:#777">No reviews yet — be the first!</p>';
+}
+
+async function submitReview() {
+  if (!getUser()) { showAuth(); return; }
+  if (!myRating) { rvMsg.textContent = 'Pick a star rating first'; return; }
+  try {
+    const r = await api(`/api/produce/${pid}/reviews`, { method:'POST',
+      body: JSON.stringify({ rating: myRating, title: rvTitle.value, body: rvBody.value }) });
+    alert('✅ Review posted!' + (r.verified ? ' (Verified Purchase)' : ''));
+    location.reload();
+  } catch (e) { rvMsg.textContent = e.message; }
+}
+
+async function addToCart(id) {
+  if (!getUser()) { showAuth(); return; }
+  if (getUser().role !== 'buyer') { alert('Switch to a Buyer account to shop.'); return; }
+  try {
+    await api('/api/cart', { method:'POST', body: JSON.stringify({ produce_id: id, qty_kg: +buyQty.value }) });
+    refreshCartBadge(); alert('Added to cart ✅');
+  } catch (e) { alert('❌ ' + e.message); }
+}
+async function buyNow(id) {
+  await addToCart(id); location.href = '/buyer.html';
+}
+
+load();
+</script>
+</body>
+</html>

@@ -63,26 +63,49 @@ app.post('/api/logout', auth, (req, res) => {
 
 app.get('/api/me', auth, (req, res) => res.json(publicUser(req.user)));
 
-// ---------- MARKETPLACE (public, with search/sort/filter) ----------
+// ---------- MARKETPLACE (public, with search/sort/filter/categories/ratings) ----------
+app.get('/api/categories', (req, res) => {
+  const rows = db.prepare(`
+    SELECT DISTINCT p.crop FROM produce p
+    WHERE p.status = 'available' AND p.quantity_kg > 0`).all();
+  const cats = {};
+  rows.forEach(r => { (cropCatSafe(r.crop)).forEach(c => cats[c] = 1); });
+  res.json(Object.keys(cats));
+});
+
+function cropCatSafe(c) {
+  const m = { Tomato:['Vegetables'],Onion:['Vegetables'],Potato:['Vegetables'],Carrot:['Vegetables'],
+              Spinach:['Vegetables'],Wheat:['Grains'],Rice:['Grains'],Soybean:['Oilseeds'],
+              Mango:['Fruits'],Banana:['Fruits'] };
+  return m[c] || ['Other'];
+}
+
 app.get('/api/produce', (req, res) => {
-  const { q, crop, sort } = req.query;
+  const { q, crop, sort, cat } = req.query;
   let sql = `
     SELECT p.*, u.name AS farmer_name, u.fpo_name, u.location AS farmer_location
     FROM produce p JOIN users u ON p.farmer_id = u.id
     WHERE p.status = 'available' AND p.quantity_kg > 0`;
   const params = [];
-  if (q) {
-    sql += ' AND (p.crop LIKE ? OR u.name LIKE ? OR u.location LIKE ?)';
-    params.push(`%${q}%`, `%${q}%`, `%${q}%`);
-  }
-  if (crop) {
-    sql += ' AND p.crop = ?';
-    params.push(crop);
+  if (q)    { sql += ' AND (p.crop LIKE ? OR u.name LIKE ? OR u.location LIKE ?)'; params.push(`%${q}%`, `%${q}%`, `%${q}%`); }
+  if (crop) { sql += ' AND p.crop = ?'; params.push(crop); }
+  if (cat)  {
+    const allCrops = ['Tomato','Onion','Potato','Carrot','Spinach','Wheat','Rice','Soybean','Mango','Banana'];
+    const matching = allCrops.filter(c => cropCatSafe(c).includes(cat));
+    if (matching.length > 0) {
+      sql += ` AND p.crop IN (${matching.map(() => '?').join(',')})`;
+      params.push(...matching);
+    } else {
+      sql += ` AND 1 = 0`;
+    }
   }
   sql += sort === 'price_asc' ? ' ORDER BY p.price_per_kg ASC'
        : sort === 'price_desc' ? ' ORDER BY p.price_per_kg DESC'
+       : sort === 'rating' ? ''
        : ' ORDER BY p.created_at DESC';
-  res.json(db.prepare(sql).all(...params));
+  let rows = db.prepare(sql).all(...params).map(p => ({ ...p, rating: ratingFor(p.id) }));
+  if (sort === 'rating') rows.sort((a, b) => b.rating.avg - a.rating.avg);
+  res.json(rows);
 });
 
 // ---------- PRODUCE (farmer) ----------
@@ -216,5 +239,91 @@ app.get('/api/impact', (req, res) => {
   `).get());
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🌾 FarmDirect on http://localhost:${PORT}`));
+// ---------- REVIEWS & RATINGS ----------
+// Rating summary for a produce
+function ratingFor(produceId) {
+  const r = db.prepare(`
+    SELECT COUNT(*) AS count, COALESCE(AVG(rating), 0) AS avg FROM reviews WHERE produce_id = ?
+  `).get(produceId);
+  return { count: r.count, avg: Math.round(r.avg * 10) / 10 };
+}
+
+// Farmer (seller) rating = avg of all reviews on their produce
+function sellerRating(farmerId) {
+  const r = db.prepare(`
+    SELECT COUNT(*) AS count, COALESCE(AVG(rating), 0) AS avg
+    FROM reviews rv JOIN produce p ON rv.produce_id = p.id
+    WHERE p.farmer_id = ?
+  `).get(farmerId);
+  return { count: r.count, avg: Math.round(r.avg * 10) / 10 };
+}
+
+// Public: reviews for a product (with reviewer name + verified badge)
+app.get('/api/produce/:id', (req, res) => {
+  const p = db.prepare(`
+    SELECT p.*, u.name AS farmer_name, u.fpo_name, u.location AS farmer_location
+    FROM produce p JOIN users u ON p.farmer_id = u.id WHERE p.id = ?
+  `).get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Product not found' });
+
+  const reviews = db.prepare(`
+    SELECT rv.*, u.name AS reviewer_name,
+      EXISTS(SELECT 1 FROM orders o WHERE o.buyer_id = rv.user_id
+             AND o.produce_id = rv.produce_id AND o.status = 'delivered') AS verified
+    FROM reviews rv JOIN users u ON rv.user_id = u.id
+    WHERE rv.produce_id = ? ORDER BY rv.created_at DESC
+  `).all(req.params.id);
+
+  // histogram: {1: n, 2: n, ...}
+  const hist = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  reviews.forEach(r => hist[r.rating]++);
+
+  res.json({
+    ...p,
+    rating: ratingFor(p.id),
+    seller: { name: p.farmer_name, fpo: p.fpo_name, location: p.farmer_location,
+              rating: sellerRating(p.farmer_id) },
+    related: db.prepare(`
+      SELECT p2.id, p2.crop, p2.price_per_kg, p2.grade FROM produce p2
+      WHERE p2.id != ? AND p2.status = 'available' AND p2.quantity_kg > 0
+        AND p2.crop != ? LIMIT 4
+    `).all(p.id, p.crop),
+    reviews, histogram: hist
+  });
+});
+
+// Post a review (must be logged in; verified auto-detected)
+app.post('/api/produce/:id/reviews', auth, (req, res) => {
+  const { rating, title, body } = req.body;
+  if (!rating || rating < 1 || rating > 5) return res.status(400).json({ error: 'Rating 1–5 required' });
+  const p = db.prepare('SELECT id FROM produce WHERE id = ?').get(req.params.id);
+  if (!p) return res.status(404).json({ error: 'Product not found' });
+
+  const verified = !!db.prepare(`
+    SELECT 1 FROM orders WHERE buyer_id = ? AND produce_id = ? AND status = 'delivered'
+  `).get(req.user.id, p.id);
+
+  try {
+    const info = db.prepare(`
+      INSERT INTO reviews (produce_id, user_id, rating, title, body) VALUES (?,?,?,?,?)
+    `).run(p.id, req.user.id, rating, title || null, body || null);
+    res.json({ ok: true, id: info.lastInsertRowid, verified });
+  } catch (e) {
+    res.status(409).json({ error: 'You already reviewed this product' });
+  }
+});
+
+// Delete own review
+app.delete('/api/reviews/:id', auth, (req, res) => {
+  const rv = db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.id);
+  if (!rv || rv.user_id !== req.user.id) return res.status(404).json({ error: 'Not your review' });
+  db.prepare('DELETE FROM reviews WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+module.exports = app;
+
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`🌾 FarmDirect on http://localhost:${PORT}`));
+}

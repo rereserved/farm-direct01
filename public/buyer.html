@@ -79,6 +79,22 @@ async function loadHistory() {
       <span class="status st-${o.status}">${o.status}</span>
     </div>`).join('')
     : '<p style="color:#ccc;text-align:center">No orders yet.</p>';
+
+  // prompt for review on delivered, unreviewed orders
+  rows.filter(o => o.status === 'delivered').forEach(o => {
+    const key = 'reviewed_' + o.produce_id;
+    if (!localStorage.getItem(key)) {
+      setTimeout(() => {
+        const r = prompt(`⭐ Rate ${o.crop} from ${o.farmer_name} (1–5 stars):`);
+        if (r && r >= 1 && r <= 5) {
+          api(`/api/produce/${o.produce_id}/reviews`, { method:'POST',
+            body: JSON.stringify({ rating: +r, title: 'Verified buyer', body: '' })
+          }).then(() => { localStorage.setItem(key, '1'); alert('✅ Thanks for reviewing!'); loadHistory(); })
+            .catch(e => { localStorage.setItem(key, '1'); });
+        } else if (r !== null) localStorage.setItem(key, '1');
+      }, 500);
+    }
+  });
 }
 
 const icon = c => ({ Tomato:'🍅',Onion:'🧅',Potato:'🥔',Wheat:'🌾',Soybean:'🫘' }[c] || '🥬');

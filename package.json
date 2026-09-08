@@ -10,5 +10,8 @@
   "dependencies": {
     "express": "^4.19.2",
     "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=22.x"
   }
 }

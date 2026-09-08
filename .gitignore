@@ -3,4 +3,5 @@ farmdirect.db
 farmdirect.db-wal
 farmdirect.db-shm
 *.log
+*.txt
 .DS_Store

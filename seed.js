@@ -37,4 +37,8 @@ const history = {
 const insS = db.prepare('INSERT INTO sales_history (crop, month, qty_sold) VALUES (?,?,?)');
 Object.entries(history).forEach(([crop, arr]) => arr.forEach((q, i) => insS.run(crop, i + 1, q)));
 
+const insR = db.prepare(`INSERT OR IGNORE INTO reviews (produce_id, user_id, rating, title, body) VALUES (?,?,?,?,?)`);
+insR.run(1, fid('9000000000'), 5, 'Super fresh & organic!', 'Received fresh tomatoes directly harvested from Nashik farm. Great packaging and quality.');
+insR.run(2, fid('9000000000'), 4, 'Very good onions', 'Good size and dry skin, saved ₹6/kg vs local market.');
+
 console.log('✅ Seeded. Demo logins (password: farm123): farmer 9876500001 · buyer 9000000000');

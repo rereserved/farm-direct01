@@ -30,9 +30,17 @@
     </select>
     <select id="sort" onchange="loadMarket()">
       <option value="">Newest</option>
+      <option value="rating">Top Rated ⭐</option>
       <option value="price_asc">Price: Low → High</option>
       <option value="price_desc">Price: High → Low</option>
     </select>
+  </div>
+  <div class="catbar" id="catbar">
+    <a href="/" onclick="filterCat('');return false" class="cat active">All</a>
+    <a href="/" onclick="filterCat('Vegetables');return false" class="cat">🥦 Vegetables</a>
+    <a href="/" onclick="filterCat('Fruits');return false" class="cat">🥭 Fruits</a>
+    <a href="/" onclick="filterCat('Grains');return false" class="cat">🌾 Grains</a>
+    <a href="/" onclick="filterCat('Oilseeds');return false" class="cat">🫘 Oilseeds</a>
   </div>
   <div id="grid" class="grid"></div>
 </section>
@@ -59,6 +67,7 @@
 </div>
 
 <script src="/js/app.js"></script>
+<script src="/js/crops.js"></script>
 <script>
 let mode = 'login';
 function toggleMode() {
@@ -90,21 +99,20 @@ async function loadMarket() {
   if (q.value) params.set('q', q.value);
   if (cropFilter.value) params.set('crop', cropFilter.value);
   if (sort.value) params.set('sort', sort.value);
+  if (catbar.dataset.cat) params.set('cat', catbar.dataset.cat);
   const items = await api('/api/produce?' + params);
   grid.innerHTML = items.length ? items.map(p => `
-    <div class="card">
-      <div class="icon">${icon(p.crop)}</div>
-      <h3>${p.crop} <small>(Grade ${p.grade})</small></h3>
-      <p>🚜 <b>${p.fpo_name || p.farmer_name}</b> — ${p.location}</p>
+    <a class="card product" href="/product.html?id=${p.id}" style="text-decoration:none;color:inherit">
+      <img src="${cropImg(p.crop)}" alt="${p.crop}" style="width:100%;height:160px;object-fit:cover;border-radius:10px">
+      <h3 style="margin-top:10px">${p.crop} <small>(Grade ${p.grade})</small></h3>
+      <div class="ratingbar"><span class="stars">${stars(p.rating ? p.rating.avg : 0)}</span>
+        <small style="color:#777">${p.rating ? p.rating.avg : 0} (${p.rating ? p.rating.count : 0})</small></div>
       <p class="price">₹${p.price_per_kg}/kg
         <s>₹${p.mandi_price ? p.mandi_price.toFixed(0) : ''}</s>
-        <span class="save">SAVE ₹${(p.mandi_price - p.price_per_kg).toFixed(0)}/kg</span></p>
-      <p>${p.quantity_kg} kg available</p>
-      <div class="row">
-        <input type="number" id="q${p.id}" value="5" min="1" max="${p.quantity_kg}" class="qty"> kg
-        <button class="btn" onclick="addToCart(${p.id})">Add to Cart</button>
-      </div>
-    </div>`).join('')
+        <span class="pct" style="font-size:.75rem">${p.mandi_price ? Math.round((1 - p.price_per_kg / p.mandi_price) * 100) : 0}% OFF</span></p>
+      <p><small>🚜 ${p.fpo_name || p.farmer_name} · ${p.quantity_kg} kg left</small></p>
+      <span class="btn sm" style="display:inline-block;margin-top:8px" onclick="event.preventDefault();addToCart(${p.id})">Add to Cart</span>
+    </a>`).join('')
     : '<p style="grid-column:1/-1;text-align:center;color:#777">No produce found.</p>';
   // populate crop filter once
   if (cropFilter.dataset.filled !== '1') {
@@ -113,13 +121,20 @@ async function loadMarket() {
     cropFilter.dataset.filled = '1';
   }
 }
-const icon = c => ({ Tomato:'🍅',Onion:'🧅',Potato:'🥔',Wheat:'🌾',Soybean:'🫘' }[c] || '🥬');
 
-async function addToCart(produce_id) {
+function filterCat(cat) {
+  document.querySelectorAll('.cat').forEach(a => a.classList.remove('active'));
+  event.target.classList.add('active');
+  catbar.dataset.cat = cat;
+  loadMarket();
+}
+
+async function addToCart(produce_id, qty = 5) {
   if (!getUser()) { showAuth(); return; }
   if (getUser().role !== 'buyer') { alert('Switch to a Buyer account to shop.'); return; }
   try {
-    await api('/api/cart', { method:'POST', body: JSON.stringify({ produce_id, qty_kg: +document.getElementById('q'+produce_id).value }) });
+    const qtyVal = document.getElementById('q' + produce_id) ? +document.getElementById('q' + produce_id).value : qty;
+    await api('/api/cart', { method:'POST', body: JSON.stringify({ produce_id, qty_kg: qtyVal }) });
     refreshCartBadge();
     alert('Added to cart ✅ — go to 🛒 Cart to checkout');
   } catch (e) { alert('❌ ' + e.message); }

@@ -50,3 +50,13 @@ th{background:var(--green);color:#fff}
 .btn.danger{background:#c62828}
 .actions{float:right}
 .output{background:rgba(255,255,255,.1);padding:18px;border-radius:10px;margin-top:20px;white-space:pre-wrap}
+
+/* ---- v3 product & catbar styles ---- */
+.product{display:block;transition:.25s}
+.product:hover{transform:translateY(-6px);box-shadow:0 12px 28px rgba(0,0,0,.14)}
+.stars{color:#f5a623;letter-spacing:1px}
+.ratingbar{display:flex;align-items:center;gap:6px}
+.pct{background:#c62828;color:#fff;padding:2px 8px;border-radius:8px;font-weight:700}
+.catbar{display:flex;gap:10px;justify-content:center;margin-bottom:26px;flex-wrap:wrap}
+.cat{padding:8px 18px;border-radius:20px;background:#fff;color:#444;text-decoration:none;font-weight:600;border:1px solid #e0e0e0}
+.cat.active,.cat:hover{background:var(--green);color:#fff;border-color:var(--green)}
