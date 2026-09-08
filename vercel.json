@@ -1,6 +1,8 @@
 {
   "version": 2,
   "rewrites": [
+    { "source": "/login", "destination": "/login.html" },
+    { "source": "/register", "destination": "/register.html" },
     { "source": "/api/(.*)", "destination": "/api/index.js" }
   ]
 }
